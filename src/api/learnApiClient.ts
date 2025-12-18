@@ -7,7 +7,7 @@
  * API Reference: https://devportal-docstore.s3.amazonaws.com/learn-swagger.json
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import {
   LearnConfig,
   ApiLogEntry,
@@ -19,6 +19,16 @@ import {
   AuthToken,
   ApiResponse
 } from '../types';
+
+/**
+ * Extended Axios request config with metadata for logging
+ */
+interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
+  metadata?: {
+    startTime: number;
+    logId: string;
+  };
+}
 
 /**
  * Main API client for Blackboard Learn
@@ -39,7 +49,7 @@ export class LearnApiClient {
 
     // Add request interceptor for logging
     this.axiosInstance.interceptors.request.use(
-      (config) => {
+      (config: InternalAxiosRequestConfig): ExtendedAxiosRequestConfig => {
         const logEntry: ApiLogEntry = {
           id: this.generateId(),
           timestamp: new Date(),
@@ -54,8 +64,9 @@ export class LearnApiClient {
         }
 
         // Store start time for duration calculation
-        (config as any).metadata = { startTime: Date.now(), logId: logEntry.id };
-        return config;
+        const extendedConfig = config as ExtendedAxiosRequestConfig;
+        extendedConfig.metadata = { startTime: Date.now(), logId: logEntry.id };
+        return extendedConfig;
       },
       (error) => {
         return Promise.reject(error);
@@ -86,13 +97,14 @@ export class LearnApiClient {
    * Log successful API response
    */
   private logResponse(response: AxiosResponse): void {
-    if (this.logCallback && response.config.metadata) {
-      const duration = Date.now() - response.config.metadata.startTime;
+    const config = response.config as ExtendedAxiosRequestConfig;
+    if (this.logCallback && config.metadata) {
+      const duration = Date.now() - config.metadata.startTime;
       const logEntry: ApiLogEntry = {
-        id: response.config.metadata.logId,
+        id: config.metadata.logId,
         timestamp: new Date(),
-        method: response.config.method?.toUpperCase() || 'GET',
-        url: response.config.url || '',
+        method: config.method?.toUpperCase() || 'GET',
+        url: config.url || '',
         responseStatus: response.status,
         responseData: response.data,
         duration,
@@ -106,16 +118,16 @@ export class LearnApiClient {
    */
   private logError(error: any): void {
     if (this.logCallback) {
-      const config = error.config || {};
+      const config = error.config as ExtendedAxiosRequestConfig | undefined;
       const logEntry: ApiLogEntry = {
-        id: config.metadata?.logId || this.generateId(),
+        id: config?.metadata?.logId || this.generateId(),
         timestamp: new Date(),
-        method: config.method?.toUpperCase() || 'UNKNOWN',
-        url: config.url || 'UNKNOWN',
+        method: config?.method?.toUpperCase() || 'UNKNOWN',
+        url: config?.url || 'UNKNOWN',
         responseStatus: error.response?.status,
         responseData: error.response?.data,
         error: error.message || 'Unknown error',
-        duration: config.metadata ? Date.now() - config.metadata.startTime : 0,
+        duration: config?.metadata ? Date.now() - config.metadata.startTime : 0,
       };
       this.logCallback(logEntry);
     }

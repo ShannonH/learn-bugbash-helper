@@ -10,8 +10,6 @@ import {
   Typography,
   Paper,
   List,
-  ListItem,
-  ListItemText,
   Chip,
   Accordion,
   AccordionSummary,
